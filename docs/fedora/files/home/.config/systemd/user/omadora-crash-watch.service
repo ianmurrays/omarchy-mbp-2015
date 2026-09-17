@@ -1,0 +1,12 @@
+[Unit]
+Description=Show a notification with a Claude diagnosis action when a process crashes
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/omadora-crash-watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

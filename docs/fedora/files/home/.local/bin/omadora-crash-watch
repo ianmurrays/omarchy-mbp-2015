@@ -1,0 +1,28 @@
+#!/bin/bash
+# Show a notification when one of my processes dumps core. A port of omarchy-crash-watch.
+# The "Diagnose with Claude" action opens Claude Code with the diagnose-crash skill.
+# The omadora-crash-watch user service starts this script.
+
+# systemd-coredump writes this message ID for each core dump.
+COREDUMP_MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1
+# A program that crashes again in this number of seconds gets no new notification.
+DEDUPE_SECONDS=60
+
+declare -A last_crash
+
+journalctl --user -f -n 0 -o json MESSAGE_ID=$COREDUMP_MESSAGE_ID |
+  jq --unbuffered -r '[.COREDUMP_PID, .COREDUMP_COMM, .COREDUMP_EXE, .COREDUMP_SIGNAL_NAME] | map(. // "?") | @tsv' |
+  while IFS=$'\t' read -r pid comm exe signal; do
+    [[ $comm == omadora-* ]] && continue
+    now=$(date +%s)
+    (( now - ${last_crash[$comm]:-0} < DEDUPE_SECONDS )) && continue
+    last_crash[$comm]=$now
+
+    (
+      action=$(notify-send -u critical -a Omadora --action=diagnose="Diagnose with Claude" \
+        "$comm crashed ($signal)" "PID $pid, $exe")
+      if [[ $action == diagnose ]]; then
+        omadora-agent "Use the diagnose-crash skill. $comm (PID $pid, $exe) crashed with $signal."
+      fi
+    ) &
+  done

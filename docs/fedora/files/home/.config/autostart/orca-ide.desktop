@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Orca
+Comment=Next-gen IDE for parallel agentic development
+Exec=/home/<user>/Applications/orca-ide.AppImage --disable-gpu-compositing
+Icon=orca-ide
+Terminal=false
+StartupWMClass=orca
+X-GNOME-Autostart-enabled=true

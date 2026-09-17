@@ -1,0 +1,30 @@
+--- /usr/src/facetimehd-0.7.2/fthd_isp.c	2026-09-15 20:25:46.658191267 +0200
++++ build/fthd_isp.c	2026-09-16 17:07:59.491803701 +0200
+@@ -12,6 +12,7 @@
+ #include <linux/acpi.h>
+ #include <linux/firmware.h>
+ #include <linux/dmi.h>
++#include <media/v4l2-ctrls.h>
+ #include "fthd_drv.h"
+ #include "fthd_hw.h"
+ #include "fthd_reg.h"
+@@ -1232,12 +1233,14 @@
+ 	ret = fthd_isp_cmd_channel_streaming_mode(dev_priv, 0, 0);
+ 	if (ret)
+ 		return ret;
+-	ret = fthd_isp_cmd_channel_brightness_set(dev_priv, 0, 0x80);
++	/* Apply the current control values rather than hardcoded defaults, so
++	 * anything the user set survives a stream restart. Cosmetic, so a
++	 * failure here must not abort streaming. */
++	ret = v4l2_ctrl_handler_setup(&dev_priv->v4l2_ctrl_handler);
+ 	if (ret)
+-		return ret;
+-	ret = fthd_isp_cmd_channel_contrast_set(dev_priv, 0, 0x80);
+-	if (ret)
+-		return ret;
++		dev_warn(&dev_priv->pdev->dev,
++			 "failed to apply controls (%d), continuing\n", ret);
++
+ 	ret = fthd_isp_cmd_channel_start(dev_priv);
+ 	if (ret)
+ 		return ret;

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Orca
+Comment=Next-gen IDE for parallel agentic development
+Exec=/home/<user>/Applications/orca-ide.AppImage --disable-gpu-compositing %U
+Icon=orca-ide
+Terminal=false
+Type=Application
+StartupWMClass=orca
+MimeType=text/markdown;x-scheme-handler/orca;
+Categories=Development;IDE;
+X-AppImage-Version=1.4.200

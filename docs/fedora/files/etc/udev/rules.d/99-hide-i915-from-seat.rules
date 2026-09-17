@@ -1,0 +1,11 @@
+# MacBookPro11,5: the Radeon R9 M370X owns the built-in panel (card0-eDP-1) and all
+# external ports (HDMI-A-1, DP-1, DP-2). The Intel Iris Pro P5200 at 0000:00:02.0 has
+# only phantom connectors (DP-3/DP-4/HDMI-A-2/HDMI-A-3, all permanently disconnected).
+#
+# udev tags it master-of-seat on seat0, so mutter enumerates it and creates a gbm
+# renderer for /dev/dri/card1 ("Created gbm renderer for '/dev/dri/card1'"), which
+# gnome-shell and Xwayland then hold open, keeping i915 runtime-active forever.
+# Moving it off seat0 makes mutter skip it.
+#
+# Revert: sudo rm /etc/udev/rules.d/99-hide-i915-from-seat.rules  (then reboot)
+SUBSYSTEM=="drm", KERNELS=="0000:00:02.0", ENV{ID_SEAT}="seat-none", TAG-="master-of-seat"

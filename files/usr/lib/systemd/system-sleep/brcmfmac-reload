@@ -1,0 +1,41 @@
+#!/bin/sh
+# Work around brcmfmac wedging the BCM43602 firmware across S3.
+#
+# brcmfmac's PCIe resume path (brcmf_pcie_pm_leave_D3) probes a device register
+# to decide whether the chip survived sleep. If it reads the chip as alive it
+# takes a "hot resume" shortcut and keeps the already-loaded firmware. After a
+# long sleep the chip can read as alive while its firmware is actually dead --
+# every command then times out with -EIO, degrading to -ENOMEM once the msgbuf
+# ring fills, and the driver never falls back to re-downloading firmware. Only a
+# device re-probe recovers it.
+#
+# Unloading the module before sleep forces a clean firmware download on resume.
+# Observed 2026-09-12: ~8 h sleep, wifi dead for 14 h until reboot.
+
+set -u
+
+log() { echo "brcmfmac-reload: $*"; }
+
+# Unload leaf-first: brcmfmac_wcc depends on brcmfmac, which depends on brcmutil.
+UNLOAD="brcmfmac_wcc brcmfmac brcmutil"
+
+case "${1:-}" in
+pre)
+	for m in $UNLOAD; do
+		[ -d "/sys/module/$m" ] || continue
+		if modprobe -r "$m"; then
+			log "unloaded $m"
+		else
+			log "could not unload $m, continuing anyway"
+		fi
+	done
+	;;
+post)
+	# brcmfmac pulls in brcmutil and the vendor module (brcmfmac_wcc) itself.
+	if modprobe brcmfmac; then
+		log "reloaded brcmfmac"
+	else
+		log "failed to reload brcmfmac"
+	fi
+	;;
+esac

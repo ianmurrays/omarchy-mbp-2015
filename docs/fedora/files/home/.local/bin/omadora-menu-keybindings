@@ -1,0 +1,73 @@
+#!/usr/bin/python3
+# Super+K: show the GNOME keyboard shortcuts. A port of omarchy-menu-keybindings.
+# The script reads the live settings, so the list agrees with the keys that work.
+# The custom shortcuts come first. The list is for reading only.
+#
+# Usage: omadora-menu-keybindings [--print | --check]
+#   --print  Write the list to stdout.
+#   --check  Run the self-check of the key format.
+import re
+import subprocess
+import sys
+
+from gi.repository import Gio
+
+MEDIA_KEYS = "org.gnome.settings-daemon.plugins.media-keys"
+SCHEMAS = [
+    "org.gnome.desktop.wm.keybindings",
+    "org.gnome.shell.keybindings",
+    "org.gnome.mutter.keybindings",
+    "org.gnome.mutter.wayland.keybindings",
+    MEDIA_KEYS,
+]
+ORDER = ["Super", "Ctrl", "Alt", "Shift"]
+ALIASES = {"Primary": "Ctrl", "Control": "Ctrl", "Mod1": "Alt", "Mod4": "Super"}
+
+
+def fmt(accel):
+    """Change '<Shift><Super>space' to 'Super + Shift + Space'."""
+    mods = {ALIASES.get(m, m) for m in re.findall(r"<(\w+)>", accel)}
+    mods = sorted(mods, key=lambda m: ORDER.index(m) if m in ORDER else len(ORDER))
+    key = re.sub(r"<\w+>", "", accel)
+    return " + ".join(mods + [key[:1].upper() + key[1:]])
+
+
+def rows():
+    media = Gio.Settings.new(MEDIA_KEYS)
+    for path in media.get_strv("custom-keybindings"):
+        custom = Gio.Settings.new_with_path(MEDIA_KEYS + ".custom-keybinding", path)
+        if custom.get_string("binding"):
+            yield fmt(custom.get_string("binding")), custom.get_string("name")
+
+    source = Gio.SettingsSchemaSource.get_default()
+    for schema_id in SCHEMAS:
+        schema = source.lookup(schema_id, True)
+        if schema is None:
+            continue
+        settings = Gio.Settings.new(schema_id)
+        for key in sorted(schema.list_keys()):
+            value = settings.get_value(key)
+            if key == "custom-keybindings" or value.get_type_string() != "as":
+                continue
+            name = key.replace("-", " ").capitalize()
+            for accel in value.unpack():
+                if accel:
+                    yield fmt(accel), name
+
+
+if "--check" in sys.argv:
+    assert fmt("<Shift><Super>space") == "Super + Shift + Space"
+    assert fmt("<Primary><Alt>Delete") == "Ctrl + Alt + Delete"
+    assert fmt("XF86Keyboard") == "XF86Keyboard"
+    print("ok")
+    sys.exit(0)
+
+text = "\n".join(f"{keys:<32} → {name}" for keys, name in rows())
+if "--print" in sys.argv:
+    print(text)
+else:
+    subprocess.run(
+        ["vicinae", "dmenu", "-p", "Keybindings…", "-W", "800", "-H", "500",
+         "--no-section", "--no-quick-look", "--no-footer"],
+        input=text, text=True, stdout=subprocess.DEVNULL,
+    )

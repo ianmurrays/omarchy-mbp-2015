@@ -1,0 +1,4 @@
+#!/bin/bash
+# Open Claude Code in a new terminal window in ~/src. A port of omarchy-agent.
+# The arguments become the first prompt.
+exec ptyxis --new-window -d "$HOME/src" -- claude --permission-mode auto "$@"

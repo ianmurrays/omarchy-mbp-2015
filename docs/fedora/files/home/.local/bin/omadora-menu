@@ -1,0 +1,201 @@
+#!/bin/bash
+# The Omadora menu: a port of the Omarchy menu (Super+Space) to GNOME.
+# Vicinae dmenu mode shows each list.
+#
+# Usage: omadora-menu [system | toggle NAME | reminder [show|clear] | notice time|battery]
+# With no argument, the script shows the main menu.
+
+dmenu() {
+  vicinae dmenu -p "$1…" --no-section --no-quick-look --no-footer
+}
+
+# menu PROMPT ENTRY... prints the selected entry. Exit 1 on Escape.
+menu() {
+  printf '%s\n' "${@:2}" | dmenu "$1"
+}
+
+# ask PROMPT prints the typed text. With no entries, Enter returns the search text.
+ask() {
+  : | dmenu "$1"
+}
+
+notify() {
+  notify-send -u low -a Omadora "$@"
+}
+
+# term COMMAND runs COMMAND in a new terminal window and keeps the window open.
+term() {
+  ptyxis --new-window -- bash -c "$1; read -rp 'Done. Push Enter to close.'"
+}
+
+# flip SCHEMA KEY LABEL changes a boolean setting to its other value.
+flip() {
+  if [[ $(gsettings get "$1" "$2") == true ]]; then
+    gsettings set "$1" "$2" false && notify "$3: off"
+  else
+    gsettings set "$1" "$2" true && notify "$3: on"
+  fi
+}
+
+toggle() {
+  case $1 in
+  idle)
+    # ponytail: "off" resets idle-delay to the default (300 s). Save the old value if it is ever changed.
+    if [[ $(gsettings get org.gnome.desktop.session idle-delay) == "uint32 0" ]]; then
+      gsettings reset org.gnome.desktop.session idle-delay && notify "Stay awake: off"
+    else
+      gsettings set org.gnome.desktop.session idle-delay 0 && notify "Stay awake: on"
+    fi
+    ;;
+  notifications) flip org.gnome.desktop.notifications show-banners Notifications ;;
+  nightlight) flip org.gnome.settings-daemon.plugins.color night-light-enabled Nightlight ;;
+  dark)
+    if [[ $(gsettings get org.gnome.desktop.interface color-scheme) == "'prefer-dark'" ]]; then
+      gsettings set org.gnome.desktop.interface color-scheme default && notify "Dark mode: off"
+    else
+      gsettings set org.gnome.desktop.interface color-scheme prefer-dark && notify "Dark mode: on"
+    fi
+    ;;
+  crash-capture)
+    if systemctl --user is-enabled --quiet omadora-crash-watch; then
+      systemctl --user disable --now omadora-crash-watch && notify "Crash capture: off"
+    else
+      systemctl --user enable --now omadora-crash-watch && notify "Crash capture: on"
+    fi
+    ;;
+  *) echo "omadora-menu: unknown toggle: $1" >&2; return 2 ;;
+  esac
+}
+
+# Each reminder is a transient systemd user timer. The unit description holds the text.
+reminder() {
+  case $1 in
+  show)
+    local lines
+    lines=$(systemctl --user list-timers --output=json 'omadora-reminder-*' |
+      jq -r '.[] | "\(.next / 1000000 | floor | strflocaltime("%H:%M")) \(.activates)"' |
+      while read -r time unit; do
+        echo "$time  $(systemctl --user show -p Description --value "$unit")"
+      done)
+    notify "Reminders" "${lines:-No reminders}"
+    ;;
+  clear)
+    systemctl --user stop 'omadora-reminder-*.timer' && notify "Reminders: cleared"
+    ;;
+  *)
+    local min msg
+    min=$(ask "Remind in minutes") || return
+    if [[ ! $min =~ ^[0-9]+$ ]]; then
+      notify "Reminder not set" "\"$min\" is not a number of minutes."
+      return 1
+    fi
+    msg=$(ask "Reminder text") || return
+    msg=${msg:-Reminder}
+    systemd-run --user --collect --quiet --on-active="${min}m" \
+      --unit="omadora-reminder-$(date +%s%N)" --description="$msg" \
+      notify-send -u critical -a Omadora Reminder "$msg" &&
+      notify "Reminder in $min min" "$msg"
+    ;;
+  esac
+}
+
+notice() {
+  case $1 in
+  time) notify "$(date +'%A %H:%M · %d %B %Y · Week %V')" ;;
+  battery)
+    local bat=/sys/class/power_supply/BAT0
+    notify "Battery $(<"$bat/capacity")% · $(<"$bat/status")"
+    ;;
+  esac
+}
+
+show_learn() {
+  case $(menu Learn Keybindings Omarchy GNOME Fedora Bash Omadora) in
+  Keybindings) exec omadora-menu-keybindings ;;
+  Omarchy) xdg-open https://omarchy.org/manual/ ;;
+  GNOME) xdg-open https://help.gnome.org/ ;;
+  Fedora) xdg-open https://docs.fedoraproject.org/ ;;
+  Bash) xdg-open https://devhints.io/bash ;;
+  Omadora) xdg-open https://omarchy.org/ ;;
+  esac
+}
+
+show_toggle() {
+  case $(menu Toggle "Stay Awake" Notifications Nightlight "Dark Mode" "Crash Capture") in
+  "Stay Awake") toggle idle ;;
+  Notifications) toggle notifications ;;
+  Nightlight) toggle nightlight ;;
+  "Dark Mode") toggle dark ;;
+  "Crash Capture") toggle crash-capture ;;
+  esac
+}
+
+show_reminder() {
+  case $(menu Reminder "Set" "Show all" "Clear all") in
+  "Set") reminder ;;
+  "Show all") reminder show ;;
+  "Clear all") reminder clear ;;
+  esac
+}
+
+show_trigger() {
+  case $(menu Trigger Agent Emoji Clipboard Reminder Toggle) in
+  Agent) exec omadora-agent ;;
+  Emoji) exec vicinae vicinae://launch/core/search-emojis ;;
+  Clipboard) exec vicinae vicinae://launch/clipboard/history ;;
+  Reminder) show_reminder ;;
+  Toggle) show_toggle ;;
+  esac
+}
+
+show_setup() {
+  case $(menu Setup Keyboard Display Sound Wi-Fi Bluetooth Power) in
+  Keyboard) exec gnome-control-center keyboard ;;
+  Display) exec gnome-control-center display ;;
+  Sound) exec gnome-control-center sound ;;
+  Wi-Fi) exec gnome-control-center wifi ;;
+  Bluetooth) exec gnome-control-center bluetooth ;;
+  Power) exec gnome-control-center power ;;
+  esac
+}
+
+show_update() {
+  case $(menu Update System Flatpak Firmware "Restart Wi-Fi") in
+  # The Tailscale repo has a GPG key error. See README.md, open items.
+  System) term 'sudo dnf upgrade --refresh --disablerepo=tailscale-stable' ;;
+  Flatpak) term 'flatpak update' ;;
+  Firmware) term 'fwupdmgr refresh; fwupdmgr update' ;;
+  # The same modules as files/usr/lib/systemd/system-sleep/brcmfmac-reload.
+  "Restart Wi-Fi") term 'sudo modprobe -r brcmfmac_wcc brcmfmac brcmutil && sudo modprobe brcmfmac' ;;
+  esac
+}
+
+show_system() {
+  case $(menu System Lock Suspend Logout Restart Shutdown) in
+  Lock) loginctl lock-session ;;
+  Suspend) systemctl suspend ;;
+  Logout) gnome-session-quit --logout --no-prompt ;;
+  Restart) systemctl reboot ;;
+  Shutdown) systemctl poweroff ;;
+  esac
+}
+
+show_main() {
+  case $(menu Go Apps Learn Trigger Setup Update System) in
+  Apps) exec vicinae vicinae://toggle ;;
+  Learn) show_learn ;;
+  Trigger) show_trigger ;;
+  Setup) show_setup ;;
+  Update) show_update ;;
+  System) show_system ;;
+  esac
+}
+
+case $1 in
+"") show_main ;;
+system) show_system ;;
+toggle) toggle "$2" ;;
+reminder) reminder "$2" ;;
+notice) notice "$2" ;;
+*) echo "Usage: omadora-menu [system | toggle NAME | reminder [show|clear] | notice time|battery]" >&2; exit 2 ;;
+esac
