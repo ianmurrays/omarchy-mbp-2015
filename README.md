@@ -50,7 +50,7 @@ onwards.
 | GUI password prompt from an agent session | Information only | [apps.md](docs/apps.md#a-gui-password-prompt-from-an-agent-session) |
 | Claude Code status line (ccstatusline) | In use, 2026-09-18 | [apps.md](docs/apps.md#claude-code-status-line-ccstatusline) |
 | GitHub CLI and SSH commit signing | **Broken: commits are unsigned** | [git-github.md](docs/git-github.md) |
-| Wi-Fi dead after a long sleep | Not applied | [wifi-after-sleep.md](docs/wifi-after-sleep.md) |
+| Wi-Fi dead after a long sleep | **Applied, verified 2026-09-21** | [wifi-after-sleep.md](docs/wifi-after-sleep.md) |
 | Intel iGPU runtime suspend | Nothing to apply, verified 2026-09-18 | [igpu-runtime-suspend.md](docs/igpu-runtime-suspend.md) |
 | FaceTime HD camera | **Applied, verified 2026-09-18** | [facetime-camera.md](docs/facetime-camera.md) |
 | The stable `facetimehd-dkms` AUR package does not build on kernel 7.2 | Tested and rejected | [facetime-camera.md](docs/facetime-camera.md#2-the-stable-aur-package-does-not-build-on-kernel-72) |
@@ -89,7 +89,11 @@ These are open on 2026-09-18.
    Slack and 1Password are installed and their desktop entries carry the flag, verified
    2026-09-18, but neither app was seen to flicker before it. `--use-angle=gl` is also
    untested against the flicker.
-8. **The Wi-Fi sleep hook is not installed** and no long sleep has been tried.
+8. **The Wi-Fi failure is intermittent, and the hook is not proved against it.** A
+   2 h 24 min sleep on 2026-09-19 killed Wi-Fi, and a 37 h sleep on the same install did
+   not. The hook works and reloads the firmware on each resume, verified over 2 cycles on
+   2026-09-21, but no failure happened while it was installed. See
+   [wifi-after-sleep.md](docs/wifi-after-sleep.md).
 9. **The camera default brightness is 128.** The ISP meters the full frame, so a backlit
    subject is dark. The udev rule that sets 155 is in the repo but not installed. See
    [facetime-camera.md](docs/facetime-camera.md#4-brightness-and-exposure).
@@ -114,8 +118,12 @@ These are open on 2026-09-18.
    yay -S facetimehd-dkms-git facetimehd-firmware facetimehd-data
    sudo modprobe facetimehd
    ```
-7. Optional, none of it currently applied: [wifi-after-sleep.md](docs/wifi-after-sleep.md),
-   [power.md](docs/power.md), [igpu-runtime-suspend.md](docs/igpu-runtime-suspend.md).
+7. Wi-Fi sleep hook: [wifi-after-sleep.md](docs/wifi-after-sleep.md).
+   ```
+   sudo install -m 0755 -o root -g root files/usr/lib/systemd/system-sleep/brcmfmac-reload /usr/lib/systemd/system-sleep/brcmfmac-reload
+   ```
+8. Optional, none of it currently applied: [power.md](docs/power.md),
+   [igpu-runtime-suspend.md](docs/igpu-runtime-suspend.md).
 
 ## After a kernel update
 

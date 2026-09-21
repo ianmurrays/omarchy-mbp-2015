@@ -10,7 +10,10 @@
 # device re-probe recovers it.
 #
 # Unloading the module before sleep forces a clean firmware download on resume.
-# Observed 2026-09-12: ~8 h sleep, wifi dead for 14 h until reboot.
+# Observed 2026-09-12 on Fedora: ~8 h sleep, wifi dead for 14 h until reboot.
+# Observed 2026-09-19 on Omarchy: 2 h 24 min sleep, first resume of the install,
+# same failure. A 37 h sleep on the same install recovered with no hook, so the
+# sleep length is not the trigger. The failure is intermittent.
 
 set -u
 
